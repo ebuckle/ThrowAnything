@@ -36,7 +36,8 @@ namespace ThrowAnything
             var thrown_dagger = library.CopyAndAdd<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d", "ThrownDagger", "a09cd01545d6414c89fe1e99c2adcb91");
             var throwing_axe_projectile = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
 
-            thrown_dagger.name = thrown_dagger.name + " (Thrown)";
+            Helpers.SetField(thrown_dagger, "m_TypeNameText", Helpers.CreateString("ThrownDaggerTypeName", "Dagger (Thrown)"));
+            Helpers.SetField(thrown_dagger, "m_DefaultNameText", Helpers.CreateString("ThrownDaggerDefaultName", "Dagger (Thrown)"));
             Helpers.SetField(thrown_dagger, "m_AttackType", AttackType.Ranged);
             Helpers.SetField(thrown_dagger, "m_AttackRange", FeetExtension.Feet(30.0f));
 
@@ -86,7 +87,6 @@ namespace ThrowAnything
         public class ToggleThrowable : ContextAction
         {
             public bool main_hand;
-            private BlueprintProjectile throwing_axe_projectile = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
 
             public override string GetCaption()
             {
@@ -117,16 +117,8 @@ namespace ThrowAnything
                     Main.logger.Log("Blueprint was null");
                     return;
                 }
-                var blueprint = weapon.Blueprint.CloneObject();
-                blueprint.name = blueprint.name + " (Thrown)";
-                Helpers.SetField(blueprint, "m_AttackType", AttackType.Ranged);
-                Helpers.SetField(blueprint, "m_AttackRange", FeetExtension.Feet(30.0f));
-
-                WeaponVisualParameters new_wp = blueprint.VisualParameters.CloneObject();
-                Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { throwing_axe_projectile });
-                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
-                Helpers.SetField(blueprint, "m_VisualParameters", new_wp);
-                Helpers.SetField(weapon, "m_Blueprint", blueprint);
+                var blueprint = weapon.Blueprint;
+                Helpers.SetField(blueprint, "m_Type", new_blueprint);
                 weapon.OnDidEquipped(unitEntityData.Descriptor);
             }
         }
