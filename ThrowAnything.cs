@@ -35,6 +35,7 @@ namespace ThrowAnything
             var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
             var thrown_dagger = library.CopyAndAdd<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d", "ThrownDagger", "a09cd01545d6414c89fe1e99c2adcb91");
             var throwing_axe_projectile = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
+            var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
 
             Helpers.SetField(thrown_dagger, "m_TypeNameText", Helpers.CreateString("ThrownDaggerTypeName", "Dagger (Thrown)"));
             Helpers.SetField(thrown_dagger, "m_DefaultNameText", Helpers.CreateString("ThrownDaggerDefaultName", "Dagger (Thrown)"));
@@ -79,7 +80,7 @@ namespace ThrowAnything
 
             var dagger_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(dagger, "m_Enchantments").AddToArray(thrown_enchantment);
             Helpers.SetField(dagger, "m_Enchantments", dagger_enchantments);
-            var thrown_dagger_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_dagger, "m_Enchantments").AddToArray(thrown_enchantment);
+            var thrown_dagger_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_dagger, "m_Enchantments").AddToArray(thrown_enchantment, strength_thrown);
             Helpers.SetField(thrown_dagger, "m_Enchantments", thrown_dagger_enchantments);
         }
 
@@ -111,14 +112,15 @@ namespace ThrowAnything
 
                 ItemEntityWeapon weapon = main_hand ? unitEntityData.Body.PrimaryHand.MaybeWeapon : unitEntityData.Body.SecondaryHand.MaybeWeapon;
                 weapon.OnWillUnequip();
-                BlueprintWeaponType new_blueprint = weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
-                if (new_blueprint == null)
+                BlueprintWeaponType new_type = weapon.Blueprint.Type.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
+                if (new_type == null)
                 {
                     Main.logger.Log("Blueprint was null");
                     return;
                 }
-                var blueprint = weapon.Blueprint;
-                Helpers.SetField(blueprint, "m_Type", new_blueprint);
+                var new_blueprint = weapon.Blueprint.CloneObject();
+                Helpers.SetField(new_blueprint, "m_Type", new_type);
+                Helpers.SetField(weapon, "m_Blueprint", new_blueprint);
                 weapon.OnDidEquipped(unitEntityData.Descriptor);
             }
         }
