@@ -1,6 +1,7 @@
 ﻿using CallOfTheWild;
 using Kingmaker;
 using Kingmaker.Blueprints;
+using Kingmaker.Blueprints.Classes;
 using Kingmaker.Blueprints.Facts;
 using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
@@ -14,6 +15,7 @@ using Kingmaker.Items;
 using Kingmaker.Items.Slots;
 using Kingmaker.RuleSystem;
 using Kingmaker.RuleSystem.Rules;
+using Kingmaker.UnitLogic;
 using Kingmaker.UnitLogic.Abilities.Blueprints;
 using Kingmaker.UnitLogic.Abilities.Components.Base;
 using Kingmaker.UnitLogic.Abilities.Components.CasterCheckers;
@@ -23,6 +25,7 @@ using Kingmaker.Utility;
 using Kingmaker.View;
 using Kingmaker.View.Animation;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using TinyJson;
 using UnityEngine;
@@ -38,30 +41,14 @@ namespace ThrowAnything
 
         static WeaponCategory[] throwable_weapon_categories = { WeaponCategory.Dagger, WeaponCategory.Club, WeaponCategory.Spear, WeaponCategory.LightHammer, WeaponCategory.Starknife, WeaponCategory.Trident };
 
-        static BlueprintWeaponEnchantment thrown_enchantment;
-
         static BlueprintProjectile thrown_weapon_proj;
+
+        static Dictionary<BlueprintWeaponType, BlueprintWeaponType> thrown_type_blueprints;
 
         public static void create()
         {
-            var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
-            var thrown_dagger = library.CopyAndAdd<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d", "ThrownDagger", "a09cd01545d6414c89fe1e99c2adcb91");
-            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
-            var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
-
-            Helpers.SetField(thrown_dagger, "m_TypeNameText", Helpers.CreateString("ThrownDaggerTypeName", "Dagger (Thrown)"));
-            Helpers.SetField(thrown_dagger, "m_DefaultNameText", Helpers.CreateString("ThrownDaggerDefaultName", "Dagger (Thrown)"));
-            Helpers.SetField(thrown_dagger, "m_AttackType", AttackType.Ranged);
-            Helpers.SetField(thrown_dagger, "m_AttackRange", FeetExtension.Feet(30.0f));
-
-            WeaponVisualParameters new_wp = thrown_dagger.VisualParameters.CloneObject();
-            Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { thrown_weapon_proj });
-            Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
-            Helpers.SetField(thrown_dagger, "m_VisualParameters", new_wp);
-
-            dagger.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = thrown_dagger));
-            thrown_dagger.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = dagger));
-
+            createWeaponTypes();
+            createWeaponBlueprints();
 
             var toggle_ability_main = CreateAbility("ThrownWeaponMainhandToggleAbility",
                                                     "Toggle Thrown Main Hand",
@@ -101,13 +88,73 @@ namespace ThrowAnything
                                               );
             throw_feature.HideInCharacterSheetAndLevelUp = true;
 
-            thrown_enchantment = Common.createWeaponEnchantment("ThrownWeaponToggle", "Throwing", "This weapon may also be thrown.", "", "", "092b0f5dc5e947e09a614aea81007cc8", 0, null, Create<AddUnitFeatureEquipment>(a => a.Feature = throw_feature));
+            var basic_feat_progression = Main.library.Get<BlueprintProgression>("5b72dd2ca2cb73b49903806ee8986325");
 
+            basic_feat_progression.LevelEntries[0].Features.Add(throw_feature);
 
-            var dagger_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(dagger, "m_Enchantments").AddToArray(thrown_enchantment);
-            Helpers.SetField(dagger, "m_Enchantments", dagger_enchantments);
-            var thrown_dagger_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_dagger, "m_Enchantments").AddToArray(thrown_enchantment, strength_thrown);
-            Helpers.SetField(thrown_dagger, "m_Enchantments", thrown_dagger_enchantments);
+            Action<UnitDescriptor> save_game_action = delegate (UnitDescriptor u)
+            {
+                if (!u.HasFact(throw_feature))
+                {
+                    u.AddFact(throw_feature);
+                }
+            };
+            SaveGameFix.save_game_actions.Add(save_game_action);
+        }
+
+        public static void createWeaponTypes()
+        {
+            var all_throwable_types = library.GetAllBlueprints().OfType<BlueprintWeaponType>().Where(b => throwable_weapon_categories.Contains(b.Category)).ToArray();
+            var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
+            thrown_type_blueprints = new Dictionary<BlueprintWeaponType, BlueprintWeaponType>();
+            var seed_guid = "a8bb69f6793a40f68fe34125f44c7684";
+
+            foreach (var type in all_throwable_types)
+            {
+                var thrown_type = library.CopyAndAdd<BlueprintWeaponType>(type, "Thrown" + type.name, Helpers.MergeIds(type.AssetGuid, seed_guid));
+
+                Helpers.SetField(thrown_type, "m_TypeNameText", Helpers.CreateString(thrown_type.name + "TypeName", thrown_type.TypeName + " (Thrown)"));
+                Helpers.SetField(thrown_type, "m_DefaultNameText", Helpers.CreateString(thrown_type.name + "DefaultName", thrown_type.DefaultName + " (Thrown)"));
+                Helpers.SetField(thrown_type, "m_AttackType", AttackType.Ranged);
+                // TODO Switch case on ranges
+                Helpers.SetField(thrown_type, "m_AttackRange", FeetExtension.Feet(30.0f));
+
+                WeaponVisualParameters new_wp = thrown_type.VisualParameters.CloneObject();
+                Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { thrown_weapon_proj });
+                //TODO switch case on animation styles
+                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
+                Helpers.SetField(thrown_type, "m_VisualParameters", new_wp);
+
+                thrown_type_blueprints.Add(type, thrown_type);
+            }
+        }
+
+        public static void createWeaponBlueprints()
+        {
+            var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
+            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
+            var all_throwable_weapons = library.GetAllBlueprints().OfType<BlueprintItemWeapon>().Where(b => throwable_weapon_categories.Contains(b.Category)).ToArray();
+            var seed_guid = "2ec9a69b2e6041e285b4005ffc47efd2";
+
+            foreach (var weapon in all_throwable_weapons)
+            {
+                var thrown_weapon = library.CopyAndAdd(weapon, "Thrown" + weapon.name, Helpers.MergeIds(weapon.AssetGuid, seed_guid));
+                var new_type = thrown_type_blueprints[thrown_weapon.Type];
+
+                Helpers.SetField(thrown_weapon, "m_DisplayNameText", Helpers.CreateString(thrown_weapon.Name + "ThrownName", thrown_weapon.Name + " (Thrown)"));
+                Helpers.SetField(thrown_weapon, "m_Type", new_type);
+
+                WeaponVisualParameters new_wp = thrown_weapon.VisualParameters.CloneObject();
+                Helpers.SetField(new_wp, "m_Projectiles", new_type.VisualParameters.Projectiles);
+                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", new_type.VisualParameters.AnimStyle);
+                Helpers.SetField(thrown_weapon, "m_VisualParameters", new_wp);
+
+                weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = thrown_weapon));
+                thrown_weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = weapon));
+
+                var thrown_weapon_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_weapon, "m_Enchantments").AddToArray(strength_thrown);
+                Helpers.SetField(thrown_weapon, "m_Enchantments", thrown_weapon_enchantments);
+            }
         }
 
         [AllowedOn(typeof(BlueprintUnitFact))]
@@ -138,24 +185,15 @@ namespace ThrowAnything
 
                 ItemEntityWeapon weapon = main_hand ? unitEntityData.Body.PrimaryHand.MaybeWeapon : unitEntityData.Body.SecondaryHand.MaybeWeapon;
                 weapon.OnWillUnequip();
-                BlueprintWeaponType new_type = weapon.Blueprint.Type.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
-                var new_blueprint = weapon.Blueprint.CloneObject();
-                Helpers.SetField(new_blueprint, "m_Type", new_type);
-
-                WeaponVisualParameters new_wp = new_blueprint.VisualParameters.CloneObject();
-                Helpers.SetField(new_wp, "m_Projectiles", new_type.VisualParameters.Projectiles);
-                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", new_type.VisualParameters.AnimStyle);
-                Helpers.SetField(new_blueprint, "m_VisualParameters", new_wp);
-
+                var new_blueprint = weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
                 Helpers.SetField(weapon, "m_Blueprint", new_blueprint);
                 weapon.OnDidEquipped(unitEntityData.Descriptor);
-                Main.logger.Log(weapon.Blueprint.VisualParameters.AnimStyle.ToString());
             }
         }
 
         public class WeaponBlueprintHolder : BlueprintComponent
         {
-            public BlueprintWeaponType blueprint_weapon;
+            public BlueprintItemWeapon blueprint_weapon;
         }
 
         [AllowedOn(typeof(BlueprintAbility))]
