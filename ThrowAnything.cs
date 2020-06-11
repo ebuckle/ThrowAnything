@@ -17,6 +17,7 @@ using Kingmaker.UnitLogic.Abilities.Components.CasterCheckers;
 using Kingmaker.UnitLogic.Mechanics;
 using Kingmaker.UnitLogic.Mechanics.Actions;
 using Kingmaker.Utility;
+using Kingmaker.View;
 using Kingmaker.View.Animation;
 using System;
 using System.Linq;
@@ -39,7 +40,7 @@ namespace ThrowAnything
         {
             var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
             var thrown_dagger = library.CopyAndAdd<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d", "ThrownDagger", "a09cd01545d6414c89fe1e99c2adcb91");
-            var throwing_dagger_projectile = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
+            var hand_apprentice_proj = library.Get<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1");
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
 
             Helpers.SetField(thrown_dagger, "m_TypeNameText", Helpers.CreateString("ThrownDaggerTypeName", "Dagger (Thrown)"));
@@ -48,7 +49,7 @@ namespace ThrowAnything
             Helpers.SetField(thrown_dagger, "m_AttackRange", FeetExtension.Feet(30.0f));
 
             WeaponVisualParameters new_wp = thrown_dagger.VisualParameters.CloneObject();
-            Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { throwing_axe_projectile });
+            Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { hand_apprentice_proj });
             Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
             Helpers.SetField(thrown_dagger, "m_VisualParameters", new_wp);
 
