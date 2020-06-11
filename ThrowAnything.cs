@@ -1,9 +1,11 @@
 ﻿using CallOfTheWild;
+using Kingmaker;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Facts;
 using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.Blueprints.Root;
+using Kingmaker.Controllers.Projectiles;
 using Kingmaker.Designers.Mechanics.EquipmentEnchants;
 using Kingmaker.ElementsSystem;
 using Kingmaker.EntitySystem.Entities;
@@ -11,6 +13,7 @@ using Kingmaker.Enums;
 using Kingmaker.Items;
 using Kingmaker.Items.Slots;
 using Kingmaker.RuleSystem;
+using Kingmaker.RuleSystem.Rules;
 using Kingmaker.UnitLogic.Abilities.Blueprints;
 using Kingmaker.UnitLogic.Abilities.Components.Base;
 using Kingmaker.UnitLogic.Abilities.Components.CasterCheckers;
@@ -22,6 +25,7 @@ using Kingmaker.View.Animation;
 using System;
 using System.Linq;
 using TinyJson;
+using UnityEngine;
 using UnityEngine.UI;
 using static CallOfTheWild.Helpers;
 using static Kingmaker.UnitLogic.Commands.Base.UnitCommand;
@@ -36,11 +40,13 @@ namespace ThrowAnything
 
         static BlueprintWeaponEnchantment thrown_enchantment;
 
+        static BlueprintProjectile thrown_weapon_proj;
+
         public static void create()
         {
             var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
             var thrown_dagger = library.CopyAndAdd<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d", "ThrownDagger", "a09cd01545d6414c89fe1e99c2adcb91");
-            var hand_apprentice_proj = library.Get<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1");
+            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
 
             Helpers.SetField(thrown_dagger, "m_TypeNameText", Helpers.CreateString("ThrownDaggerTypeName", "Dagger (Thrown)"));
@@ -49,7 +55,7 @@ namespace ThrowAnything
             Helpers.SetField(thrown_dagger, "m_AttackRange", FeetExtension.Feet(30.0f));
 
             WeaponVisualParameters new_wp = thrown_dagger.VisualParameters.CloneObject();
-            Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { hand_apprentice_proj });
+            Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { thrown_weapon_proj });
             Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
             Helpers.SetField(thrown_dagger, "m_VisualParameters", new_wp);
 
@@ -167,6 +173,26 @@ namespace ThrowAnything
             }
 
             public WeaponCategory[] Category;
+        }
+
+
+        [Harmony12.HarmonyPatch(typeof(ProjectileController))]
+        [Harmony12.HarmonyPatch("Launch", Harmony12.MethodType.Normal)]
+        [Harmony12.HarmonyPatch(new Type[] { typeof(UnitEntityData), typeof(TargetWrapper), typeof(BlueprintProjectile), typeof(RuleAttackRoll), typeof(RulebookEvent) })]
+        class ProjectileController__Launch__Patch
+        {
+            private BlueprintProjectile throwing_axe_proj = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
+            static void Postfix(ProjectileController __instance, UnitEntityData launcher, TargetWrapper target, BlueprintProjectile projectileBlueprint, RuleAttackRoll attackRoll, RulebookEvent ruleOnHit, Projectile __result)
+            {
+                if (projectileBlueprint == thrown_weapon_proj)
+                {
+                    var weapon = attackRoll.Weapon;
+                    GameObject gameObject = UnityEngine.Object.Instantiate<GameObject>(weapon.Blueprint.VisualParameters.Model, __result.View.transform);
+                    gameObject.transform.localPosition = Vector3.zero;
+                    gameObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    gameObject.transform.localScale = Vector3.one;
+                }
+            }
         }
     }
 }
