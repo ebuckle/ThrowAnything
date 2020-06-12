@@ -110,6 +110,7 @@ namespace ThrowAnything
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
             thrown_type_blueprints = new Dictionary<WeaponCategory, BlueprintWeaponType>();
             thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
+            thrown_weapon_proj.Trajectory = library.Get<BlueprintProjectileTrajectory>("d2b5ccb441b77b045a0d68a18d8f0154");
             var seed_guid = "a8bb69f6793a40f68fe34125f44c7684";
 
             foreach (var type in all_throwable_types)
@@ -119,13 +120,15 @@ namespace ThrowAnything
                 Helpers.SetField(thrown_type, "m_TypeNameText", Helpers.CreateString(thrown_type.name + "TypeName", thrown_type.TypeName + " (Thrown)"));
                 Helpers.SetField(thrown_type, "m_DefaultNameText", Helpers.CreateString(thrown_type.name + "DefaultName", thrown_type.DefaultName + " (Thrown)"));
                 Helpers.SetField(thrown_type, "m_AttackType", AttackType.Ranged);
-                // TODO Switch case on ranges
                 Helpers.SetField(thrown_type, "m_AttackRange", FeetExtension.Feet(30.0f));
 
                 WeaponVisualParameters new_wp = thrown_type.VisualParameters.CloneObject();
                 Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { thrown_weapon_proj });
-                //TODO switch case on animation styles
-                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
+                if (thrown_type.Category == WeaponCategory.Dagger)
+                {
+                    Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownStraight);
+                }
+                
                 Helpers.SetField(thrown_type, "m_VisualParameters", new_wp);
 
                 thrown_type_blueprints.Add(thrown_type.Category, thrown_type);
@@ -221,9 +224,9 @@ namespace ThrowAnything
         [Harmony12.HarmonyPatch(new Type[] { typeof(UnitEntityData), typeof(TargetWrapper), typeof(BlueprintProjectile), typeof(RuleAttackRoll), typeof(RulebookEvent) })]
         class ProjectileController__Launch__Patch
         {
-            private BlueprintProjectile throwing_axe_proj = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
             static void Postfix(ProjectileController __instance, UnitEntityData launcher, TargetWrapper target, BlueprintProjectile projectileBlueprint, RuleAttackRoll attackRoll, RulebookEvent ruleOnHit, Projectile __result)
             {
+                //TODO sometimes throws wrong weapon
                 if (projectileBlueprint == thrown_weapon_proj)
                 {
                     var weapon = attackRoll.Weapon;
@@ -231,6 +234,7 @@ namespace ThrowAnything
                     gameObject.transform.localPosition = Vector3.zero;
                     gameObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
                     gameObject.transform.localScale = Vector3.one;
+                    __result.MaxRange = weapon.AttackRange.Meters;
                 }
             }
         }
