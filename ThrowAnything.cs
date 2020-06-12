@@ -39,11 +39,11 @@ namespace ThrowAnything
     {
         static LibraryScriptableObject library => Main.library;
 
-        static WeaponCategory[] throwable_weapon_categories = { WeaponCategory.Dagger, WeaponCategory.Club, WeaponCategory.Spear, WeaponCategory.LightHammer, WeaponCategory.Starknife, WeaponCategory.Trident };
+        static WeaponCategory[] throwable_weapon_categories = { WeaponCategory.Dagger, WeaponCategory.Starknife };
 
         static BlueprintProjectile thrown_weapon_proj;
 
-        static Dictionary<BlueprintWeaponType, BlueprintWeaponType> thrown_type_blueprints;
+        static Dictionary<WeaponCategory, BlueprintWeaponType> thrown_type_blueprints;
 
         public static void create()
         {
@@ -104,9 +104,12 @@ namespace ThrowAnything
 
         public static void createWeaponTypes()
         {
-            var all_throwable_types = library.GetAllBlueprints().OfType<BlueprintWeaponType>().Where(b => throwable_weapon_categories.Contains(b.Category)).ToArray();
+            var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
+            var starknife = library.Get<BlueprintWeaponType>("5a939137fc039084580725b2b0845c3f");
+            var all_throwable_types = new BlueprintWeaponType[] { dagger, starknife };
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
-            thrown_type_blueprints = new Dictionary<BlueprintWeaponType, BlueprintWeaponType>();
+            thrown_type_blueprints = new Dictionary<WeaponCategory, BlueprintWeaponType>();
+            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
             var seed_guid = "a8bb69f6793a40f68fe34125f44c7684";
 
             foreach (var type in all_throwable_types)
@@ -125,21 +128,23 @@ namespace ThrowAnything
                 Helpers.SetField(new_wp, "m_WeaponAnimationStyle", WeaponAnimationStyle.ThrownArc);
                 Helpers.SetField(thrown_type, "m_VisualParameters", new_wp);
 
-                thrown_type_blueprints.Add(type, thrown_type);
+                thrown_type_blueprints.Add(thrown_type.Category, thrown_type);
+
+                var thrown_type_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_type, "m_Enchantments").AddToArray(strength_thrown);
+                Helpers.SetField(thrown_type, "m_Enchantments", thrown_type_enchantments);
             }
         }
 
         public static void createWeaponBlueprints()
         {
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
-            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
             var all_throwable_weapons = library.GetAllBlueprints().OfType<BlueprintItemWeapon>().Where(b => throwable_weapon_categories.Contains(b.Category)).ToArray();
             var seed_guid = "2ec9a69b2e6041e285b4005ffc47efd2";
 
             foreach (var weapon in all_throwable_weapons)
             {
                 var thrown_weapon = library.CopyAndAdd(weapon, "Thrown" + weapon.name, Helpers.MergeIds(weapon.AssetGuid, seed_guid));
-                var new_type = thrown_type_blueprints[thrown_weapon.Type];
+                var new_type = thrown_type_blueprints[thrown_weapon.Category];
 
                 Helpers.SetField(thrown_weapon, "m_DisplayNameText", Helpers.CreateString(thrown_weapon.Name + "ThrownName", thrown_weapon.Name + " (Thrown)"));
                 Helpers.SetField(thrown_weapon, "m_Type", new_type);
@@ -151,9 +156,6 @@ namespace ThrowAnything
 
                 weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = thrown_weapon));
                 thrown_weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = weapon));
-
-                var thrown_weapon_enchantments = Helpers.GetField<BlueprintWeaponEnchantment[]>(thrown_weapon, "m_Enchantments").AddToArray(strength_thrown);
-                Helpers.SetField(thrown_weapon, "m_Enchantments", thrown_weapon_enchantments);
             }
         }
 
