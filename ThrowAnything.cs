@@ -1,13 +1,13 @@
 ﻿using CallOfTheWild;
-using Kingmaker;
+using CallOfTheWild.AooMechanics;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes;
 using Kingmaker.Blueprints.Facts;
 using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.Blueprints.Root;
+using Kingmaker.Controllers.Combat;
 using Kingmaker.Controllers.Projectiles;
-using Kingmaker.Designers.Mechanics.EquipmentEnchants;
 using Kingmaker.ElementsSystem;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Enums;
@@ -22,14 +22,11 @@ using Kingmaker.UnitLogic.Abilities.Components.CasterCheckers;
 using Kingmaker.UnitLogic.Mechanics;
 using Kingmaker.UnitLogic.Mechanics.Actions;
 using Kingmaker.Utility;
-using Kingmaker.View;
 using Kingmaker.View.Animation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TinyJson;
 using UnityEngine;
-using UnityEngine.UI;
 using static CallOfTheWild.Helpers;
 using static Kingmaker.UnitLogic.Commands.Base.UnitCommand;
 
@@ -84,14 +81,17 @@ namespace ThrowAnything
                                               "eafc849d8c474f7bac39ec43618f9dcd",
                                               null,
                                               Kingmaker.Blueprints.Classes.FeatureGroup.None,
-                                              Helpers.CreateAddFacts(toggle_ability_main, toggle_ability_off)
+                                              Helpers.CreateAddFacts(toggle_ability_main, toggle_ability_off),
+                                              Create<ToggleThrownOnAoo>(),
+                                              Create<AooWithRangedWeapon>(a => { a.weapon_categories = throwable_weapon_categories; a.required_feature = null; }),
+                                              Create<DoNotProvokeAooOnAoo>()
                                               );
             throw_feature.HideInCharacterSheetAndLevelUp = true;
 
             var basic_feat_progression = Main.library.Get<BlueprintProgression>("5b72dd2ca2cb73b49903806ee8986325");
 
             basic_feat_progression.LevelEntries[0].Features.Add(throw_feature);
-
+            
             Action<UnitDescriptor> save_game_action = delegate (UnitDescriptor u)
             {
                 if (!u.HasFact(throw_feature))
@@ -115,6 +115,7 @@ namespace ThrowAnything
 
             foreach (var type in all_throwable_types)
             {
+                //TODO: Reduce damage on -STR
                 var thrown_type = library.CopyAndAdd<BlueprintWeaponType>(type, "Thrown" + type.name, Helpers.MergeIds(type.AssetGuid, seed_guid));
 
                 Helpers.SetField(thrown_type, "m_TypeNameText", Helpers.CreateString(thrown_type.name + "TypeName", thrown_type.TypeName + " (Thrown)"));
@@ -140,7 +141,6 @@ namespace ThrowAnything
 
         public static void createWeaponBlueprints()
         {
-            var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
             var all_throwable_weapons = library.GetAllBlueprints().OfType<BlueprintItemWeapon>().Where(b => throwable_weapon_categories.Contains(b.Category)).ToArray();
             var seed_guid = "2ec9a69b2e6041e285b4005ffc47efd2";
 
@@ -152,10 +152,7 @@ namespace ThrowAnything
                 Helpers.SetField(thrown_weapon, "m_DisplayNameText", Helpers.CreateString(thrown_weapon.Name + "ThrownName", thrown_weapon.Name + " (Thrown)"));
                 Helpers.SetField(thrown_weapon, "m_Type", new_type);
 
-                WeaponVisualParameters new_wp = thrown_weapon.VisualParameters.CloneObject();
-                Helpers.SetField(new_wp, "m_Projectiles", new_type.VisualParameters.Projectiles);
-                Helpers.SetField(new_wp, "m_WeaponAnimationStyle", new_type.VisualParameters.AnimStyle);
-                Helpers.SetField(thrown_weapon, "m_VisualParameters", new_wp);
+                thrown_weapon.VisualParameters.Prototype = new_type.VisualParameters;
 
                 weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = thrown_weapon));
                 thrown_weapon.AddComponent(Create<WeaponBlueprintHolder>(w => w.blueprint_weapon = weapon));
@@ -218,7 +215,6 @@ namespace ThrowAnything
             public WeaponCategory[] Category;
         }
 
-
         [Harmony12.HarmonyPatch(typeof(ProjectileController))]
         [Harmony12.HarmonyPatch("Launch", Harmony12.MethodType.Normal)]
         [Harmony12.HarmonyPatch(new Type[] { typeof(UnitEntityData), typeof(TargetWrapper), typeof(BlueprintProjectile), typeof(RuleAttackRoll), typeof(RulebookEvent) })]
@@ -226,7 +222,6 @@ namespace ThrowAnything
         {
             static void Postfix(ProjectileController __instance, UnitEntityData launcher, TargetWrapper target, BlueprintProjectile projectileBlueprint, RuleAttackRoll attackRoll, RulebookEvent ruleOnHit, Projectile __result)
             {
-                //TODO sometimes throws wrong weapon
                 if (projectileBlueprint == thrown_weapon_proj)
                 {
                     var weapon = attackRoll.Weapon;
@@ -236,6 +231,38 @@ namespace ThrowAnything
                     gameObject.transform.localScale = Vector3.one;
                     __result.MaxRange = weapon.AttackRange.Meters;
                 }
+            }
+        }
+
+        class ToggleThrownOnAoo : RuleInitiatorLogicComponent<RuleAttackWithWeapon>
+        {
+            private bool has_toggled = false;
+
+            public override void OnEventAboutToTrigger(RuleAttackWithWeapon evt)
+            {
+                has_toggled = false;
+                if (evt.IsAttackOfOpportunity && throwable_weapon_categories.Contains(evt.Weapon.Blueprint.Category) && evt.Weapon.Blueprint.IsRanged)
+                {
+                    Main.logger.Log("Toggling AOO weapon before attack");
+                    evt.Weapon.OnWillUnequip();
+                    var new_blueprint = evt.Weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
+                    Helpers.SetField(evt.Weapon, "m_Blueprint", new_blueprint);
+                    evt.Weapon.OnDidEquipped(evt.Initiator.Descriptor);
+                    has_toggled = true;
+                }
+            }
+
+            public override void OnEventDidTrigger(RuleAttackWithWeapon evt)
+            {
+                if (has_toggled)
+                {
+                    Main.logger.Log("Toggling AOO weapon after attack");
+                    evt.Weapon.OnWillUnequip();
+                    var new_blueprint = evt.Weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
+                    Helpers.SetField(evt.Weapon, "m_Blueprint", new_blueprint);
+                    evt.Weapon.OnDidEquipped(evt.Initiator.Descriptor);
+                }
+                has_toggled = false;
             }
         }
     }
