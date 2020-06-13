@@ -115,7 +115,6 @@ namespace ThrowAnything
 
             foreach (var type in all_throwable_types)
             {
-                //TODO: Reduce damage on -STR
                 var thrown_type = library.CopyAndAdd<BlueprintWeaponType>(type, "Thrown" + type.name, Helpers.MergeIds(type.AssetGuid, seed_guid));
 
                 Helpers.SetField(thrown_type, "m_TypeNameText", Helpers.CreateString(thrown_type.name + "TypeName", thrown_type.TypeName + " (Thrown)"));
