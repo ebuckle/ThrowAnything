@@ -44,14 +44,17 @@ namespace ThrowAnything
 
         public static void create()
         {
+            createProjectile();
             createWeaponTypes();
             createWeaponBlueprints();
 
+            var magic_domain_ability = library.Get<BlueprintAbility>("8e40da3ef31245d468de08394504920b");
+
             var toggle_ability_main = CreateAbility("ThrownWeaponMainhandToggleAbility",
-                                                    "Toggle Thrown Main Hand",
-                                                    "Toggle weapon between thrown and melee.",
+                                                    "Toggle Thrown (Main Hand)",
+                                                    "Toggle main hand between thrown and melee.",
                                                     "71a259fe3f044ea5a9fd13f4b35ea887",
-                                                    null, //TODO icon
+                                                    magic_domain_ability.Icon, //TODO icon
                                                     Kingmaker.UnitLogic.Abilities.Blueprints.AbilityType.Extraordinary,
                                                     CommandType.Free,
                                                     Kingmaker.UnitLogic.Abilities.Blueprints.AbilityRange.Personal,
@@ -62,10 +65,10 @@ namespace ThrowAnything
                                                     );
 
             var toggle_ability_off = CreateAbility("ThrownWeaponOffhandToggleAbility",
-                                                   "Toggle Thrown Off Hand",
-                                                   "Toggle weapon between thrown and melee.",
+                                                   "Toggle Thrown (Off Hand)",
+                                                   "Toggle off hand between thrown and melee.",
                                                    "42408912991f442fafc22024381ae50d",
-                                                   null, //TODO icon
+                                                   magic_domain_ability.Icon, //TODO icon
                                                    Kingmaker.UnitLogic.Abilities.Blueprints.AbilityType.Extraordinary,
                                                    CommandType.Free,
                                                    Kingmaker.UnitLogic.Abilities.Blueprints.AbilityRange.Personal,
@@ -75,13 +78,18 @@ namespace ThrowAnything
                                                    Create<AbilityCasterSecondaryWeaponCheck>(a => a.Category = throwable_weapon_categories)
                                                    );
 
+            var wrapper = Common.createVariantWrapper("ThrownWeaponToggleWrapperAbility", "743ed4cd58594e7a999c9aab847e9ad6", toggle_ability_main, toggle_ability_off);
+            wrapper.SetName("Toggle Thrown");
+            wrapper.SetDescription("Toggle Main or Off-Hand weapon between thrown and melee. Works with Daggers and Starknives.");
+            wrapper.SetIcon(magic_domain_ability.Icon);
+
             var throw_feature = CreateFeature("ThrownWeaponFeature",
                                               "",
                                               "",
                                               "eafc849d8c474f7bac39ec43618f9dcd",
                                               null,
                                               Kingmaker.Blueprints.Classes.FeatureGroup.None,
-                                              Helpers.CreateAddFacts(toggle_ability_main, toggle_ability_off),
+                                              Helpers.CreateAddFact(wrapper),
                                               Create<ToggleThrownOnAoo>(),
                                               Create<AooWithRangedWeapon>(a => { a.weapon_categories = throwable_weapon_categories; a.required_feature = null; }),
                                               Create<DoNotProvokeAooOnAoo>()
@@ -102,6 +110,14 @@ namespace ThrowAnything
             SaveGameFix.save_game_actions.Add(save_game_action);
         }
 
+        public static void toggleThrown(ItemEntityWeapon weapon, UnitEntityData wielder)
+        {
+            weapon.OnWillUnequip();
+            var new_blueprint = weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
+            Helpers.SetField(weapon, "m_Blueprint", new_blueprint);
+            weapon.OnDidEquipped(wielder.Descriptor);
+        }
+
         public static void createWeaponTypes()
         {
             var dagger = library.Get<BlueprintWeaponType>("07cc1a7fceaee5b42b3e43da960fe76d");
@@ -109,8 +125,6 @@ namespace ThrowAnything
             var all_throwable_types = new BlueprintWeaponType[] { dagger, starknife };
             var strength_thrown = library.Get<BlueprintWeaponEnchantment>("c4d213911e9616949937e1520c80aaf3");
             thrown_type_blueprints = new Dictionary<WeaponCategory, BlueprintWeaponType>();
-            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
-            thrown_weapon_proj.Trajectory = library.Get<BlueprintProjectileTrajectory>("d2b5ccb441b77b045a0d68a18d8f0154");
             var seed_guid = "a8bb69f6793a40f68fe34125f44c7684";
 
             foreach (var type in all_throwable_types)
@@ -158,6 +172,17 @@ namespace ThrowAnything
             }
         }
 
+        public static void createProjectile()
+        {
+            var throwing_axe_proj = library.Get<BlueprintProjectile>("dbcc51cfd11fc1441a495daf9df9b340");
+
+            thrown_weapon_proj = library.CopyAndAdd<BlueprintProjectile>("c8559cabbf082234e80ad8e046bfa1a1", "ThrownWeaponProjectile", "c732ed37c1a3414fafcb959ed5c358ce");
+            thrown_weapon_proj.Trajectory = library.Get<BlueprintProjectileTrajectory>("d2b5ccb441b77b045a0d68a18d8f0154");
+            thrown_weapon_proj.CastFx = throwing_axe_proj.CastFx.CloneObject();
+            thrown_weapon_proj.ProjectileHit = throwing_axe_proj.ProjectileHit.CloneObject();
+            thrown_weapon_proj.DamageHit = throwing_axe_proj.DamageHit.CloneObject();
+        }
+
         [AllowedOn(typeof(BlueprintUnitFact))]
         public class ToggleThrowable : ContextAction
         {
@@ -180,15 +205,12 @@ namespace ThrowAnything
                 UnitEntityData unitEntityData = mechanicsContext.MaybeCaster;
                 if (unitEntityData == null)
                 {
-                    Main.logger.Log("Can't apply buff: target is null");
+                    Main.logger.Log("Can't toggle weapon: target is null");
                     return;
                 }
 
                 ItemEntityWeapon weapon = main_hand ? unitEntityData.Body.PrimaryHand.MaybeWeapon : unitEntityData.Body.SecondaryHand.MaybeWeapon;
-                weapon.OnWillUnequip();
-                var new_blueprint = weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
-                Helpers.SetField(weapon, "m_Blueprint", new_blueprint);
-                weapon.OnDidEquipped(unitEntityData.Descriptor);
+                toggleThrown(weapon, unitEntityData);
             }
         }
 
@@ -242,11 +264,7 @@ namespace ThrowAnything
                 has_toggled = false;
                 if (evt.IsAttackOfOpportunity && throwable_weapon_categories.Contains(evt.Weapon.Blueprint.Category) && evt.Weapon.Blueprint.IsRanged)
                 {
-                    Main.logger.Log("Toggling AOO weapon before attack");
-                    evt.Weapon.OnWillUnequip();
-                    var new_blueprint = evt.Weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
-                    Helpers.SetField(evt.Weapon, "m_Blueprint", new_blueprint);
-                    evt.Weapon.OnDidEquipped(evt.Initiator.Descriptor);
+                    toggleThrown(evt.Weapon, evt.Initiator);
                     has_toggled = true;
                 }
             }
@@ -255,11 +273,7 @@ namespace ThrowAnything
             {
                 if (has_toggled)
                 {
-                    Main.logger.Log("Toggling AOO weapon after attack");
-                    evt.Weapon.OnWillUnequip();
-                    var new_blueprint = evt.Weapon.Blueprint.GetComponent<WeaponBlueprintHolder>().blueprint_weapon;
-                    Helpers.SetField(evt.Weapon, "m_Blueprint", new_blueprint);
-                    evt.Weapon.OnDidEquipped(evt.Initiator.Descriptor);
+                    toggleThrown(evt.Weapon, evt.Initiator);
                 }
                 has_toggled = false;
             }
