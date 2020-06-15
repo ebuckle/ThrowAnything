@@ -2,17 +2,18 @@
 using CallOfTheWild.AooMechanics;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes;
+using Kingmaker.Blueprints.Classes.Prerequisites;
+using Kingmaker.Blueprints.Classes.Selection;
 using Kingmaker.Blueprints.Facts;
 using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.Blueprints.Root;
-using Kingmaker.Controllers.Combat;
 using Kingmaker.Controllers.Projectiles;
+using Kingmaker.Designers.Mechanics.Facts;
 using Kingmaker.ElementsSystem;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Enums;
 using Kingmaker.Items;
-using Kingmaker.Items.Slots;
 using Kingmaker.RuleSystem;
 using Kingmaker.RuleSystem.Rules;
 using Kingmaker.UnitLogic;
@@ -47,6 +48,7 @@ namespace ThrowAnything
             createProjectile();
             createWeaponTypes();
             createWeaponBlueprints();
+            Feats.create();
 
             var magic_domain_ability = library.Get<BlueprintAbility>("8e40da3ef31245d468de08394504920b");
 
@@ -54,7 +56,7 @@ namespace ThrowAnything
                                                     "Toggle Thrown (Main Hand)",
                                                     "Toggle main hand between thrown and melee.",
                                                     "71a259fe3f044ea5a9fd13f4b35ea887",
-                                                    magic_domain_ability.Icon, //TODO icon
+                                                    magic_domain_ability.Icon,
                                                     Kingmaker.UnitLogic.Abilities.Blueprints.AbilityType.Extraordinary,
                                                     CommandType.Free,
                                                     Kingmaker.UnitLogic.Abilities.Blueprints.AbilityRange.Personal,
@@ -68,7 +70,7 @@ namespace ThrowAnything
                                                    "Toggle Thrown (Off Hand)",
                                                    "Toggle off hand between thrown and melee.",
                                                    "42408912991f442fafc22024381ae50d",
-                                                   magic_domain_ability.Icon, //TODO icon
+                                                   magic_domain_ability.Icon,
                                                    Kingmaker.UnitLogic.Abilities.Blueprints.AbilityType.Extraordinary,
                                                    CommandType.Free,
                                                    Kingmaker.UnitLogic.Abilities.Blueprints.AbilityRange.Personal,
@@ -276,6 +278,32 @@ namespace ThrowAnything
                     toggleThrown(evt.Weapon, evt.Initiator);
                 }
                 has_toggled = false;
+            }
+        }
+
+        [Harmony12.HarmonyPatch(typeof(WeaponCategoryExtension))]
+        [Harmony12.HarmonyPatch("HasSubCategory", Harmony12.MethodType.Normal)]
+        class WeaponCategoryExtension__HasSubCategory__Patch
+        {
+            static void Postfix(WeaponCategory category, WeaponSubCategory subCategory, ref bool __result)
+            {
+                if ((category == WeaponCategory.Dagger || category == WeaponCategory.Starknife) && subCategory == WeaponSubCategory.Ranged)
+                {
+                    __result = true;
+                }
+            }
+        }
+
+        [Harmony12.HarmonyPatch(typeof(WeaponCategoryExtension))]
+        [Harmony12.HarmonyPatch("GetSubCategories", Harmony12.MethodType.Normal)]
+        class WeaponCategoryExtension__GetSubCategories__Patch
+        {
+            static void Postfix(WeaponCategory category, ref WeaponSubCategory[] __result)
+            {
+                if (category == WeaponCategory.Dagger || category == WeaponCategory.Starknife)
+                {
+                    __result = __result.AddToArray(WeaponSubCategory.Ranged);
+                }
             }
         }
     }
