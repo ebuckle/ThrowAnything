@@ -136,7 +136,7 @@ namespace ThrowAnything
                 Helpers.SetField(thrown_type, "m_TypeNameText", Helpers.CreateString(thrown_type.name + "TypeName", thrown_type.TypeName + " (Thrown)"));
                 Helpers.SetField(thrown_type, "m_DefaultNameText", Helpers.CreateString(thrown_type.name + "DefaultName", thrown_type.DefaultName + " (Thrown)"));
                 Helpers.SetField(thrown_type, "m_AttackType", AttackType.Ranged);
-                Helpers.SetField(thrown_type, "m_AttackRange", FeetExtension.Feet(30.0f));
+                Helpers.SetField(thrown_type, "m_AttackRange", FeetExtension.Feet(20.0f));
 
                 WeaponVisualParameters new_wp = thrown_type.VisualParameters.CloneObject();
                 Helpers.SetField(new_wp, "m_Projectiles", new BlueprintProjectile[] { thrown_weapon_proj });
